@@ -36,6 +36,15 @@ class GstTracerLine(object):
         return self.structure.get_value('elem-ix') != 4294967295 and \
                self.structure.get_value('peer-elem-ix') != 4294967295
 
+    def get_query_source(self):
+        return self.structure.get_value('elem-ix')
+
+    def get_query_peer(self):
+        return self.structure.get_value('peer-elem-ix')
+
+    def get_query_structure(self):
+        return self.structure.get_value('structure')
+
     def is_post_query(self):
         return self.structure.has_field('res')
 
@@ -51,18 +60,21 @@ class GstCapsQueryTree(object):
 
     def add_node(self, node):
         if node.queryline.is_post_query():
-            print 'Post query - closing: ', self.current.queryline
 #            assert self.current.queryline == node.queryline
             self.current.queryline = node.queryline
             self.current.close()
             self.current = self.current.parent
         else:
-            print 'Pre query'
             self.current.add_child(node)
             self.current = node
 
     def is_closed(self):
         return self.current == None
+
+    def get_pretty_string(self):
+        lines = []
+        self.root.get_pretty_string(lines, 0)
+        return '\n'.join(lines)
 
 class GstCapsQueryTreeNode(object):
     def __init__(self, queryline):
@@ -77,6 +89,18 @@ class GstCapsQueryTreeNode(object):
     def add_child(self, node):
         self.children.append(node)
         node.parent = self
+
+    def get_pretty_string(self, lines, indent=0):
+        structure = self.queryline.get_query_structure()
+        x = '%s%s : %s -> %s : filter: %s : res: %s' % (
+            ' ' * indent, str(self.queryline.time),
+            str(self.queryline.get_query_source()),
+            str(self.queryline.get_query_peer()),
+            structure.get_value('filter').to_string(),
+            structure.get_value('caps').to_string())
+        lines.append(x)
+        for c in self.children:
+            c.get_pretty_string(lines, indent+4)
 
 def process_file(input_file):
 
@@ -97,10 +121,6 @@ def process_file(input_file):
             if not tracer_line.query_between_elements(): continue
 
             thread = tracer_line.get_thread()
-            print '=============================================================================='
-            print threads
-            print 'Thread:', thread
-            print 'Line:', tracer_line
             if thread in threads:
                 tree = threads[thread]
                 tree.add_node(GstCapsQueryTreeNode(tracer_line))
@@ -108,12 +128,9 @@ def process_file(input_file):
                     query_trees.append(tree)
                     del threads[thread]
             else:
-                print 'New root'
                 tree = GstCapsQueryTree(GstCapsQueryTreeNode(tracer_line))
                 threads[thread] = tree
-            print
 
-    print threads
     return query_trees
 
 
@@ -122,5 +139,7 @@ if __name__ == '__main__':
 
     input_file = sys.argv[1]
 
-    r = process_file (input_file)
-    print len(r)
+    trees = process_file (input_file)
+    for t in trees:
+        print t.get_pretty_string()
+        print

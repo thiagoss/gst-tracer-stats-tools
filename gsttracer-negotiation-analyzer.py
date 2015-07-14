@@ -272,6 +272,18 @@ def process_file(input_file):
 
     return {'elements' : elements, 'pads' : pads, 'queries' : query_trees}
 
+def generate_per_pad_caps_query_summary(queries):
+    summary = {}
+    for q in queries:
+       for node in q.traverse():
+           elem = node.queryline.get_query_origin()
+           pad = node.queryline.get_query_origin_pad()
+           if (elem,pad) not in summary:
+               summary[(elem,pad)] = GstCapsQueryPadStats(elem,pad)
+	   data = summary[(elem,pad)]
+           data.add_node(node)
+    return summary
+
 if __name__ == '__main__':
     Gst.init()
 
@@ -281,6 +293,16 @@ if __name__ == '__main__':
     element_names.update(data['elements'])
     pad_names.update(data['pads'])
     queries = data['queries']
+
+    statistics = generate_per_pad_caps_query_summary (queries)
+
     for t in queries:
         print t.get_pretty_string()
+        print
+
+    print
+    print '=== STATS ==='
+    for k in statistics.keys():
+        print gen_element_pad_name(k[0], k[1])
+        print statistics[k].get_pretty_string(4)
         print

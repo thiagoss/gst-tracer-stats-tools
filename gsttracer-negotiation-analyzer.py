@@ -26,17 +26,17 @@ class GstTracerLine(object):
     def __init__(self, line):
         self.line = line
         tokens = line.split()
-        if len(tokens) < 8:
-            raise GstTracerLineParsingException
-        if 'TRACE' not in tokens[3]:
-            raise GstTracerLineParsingException
-        if 'GST_TRACER' != tokens[6]:
-            raise GstTracerLineParsingException
+        if len(tokens) < 9:
+            raise GstTracerLineParsingException, 'Not enough tokens'
+        if 'TRACE' not in tokens[4]:
+            raise GstTracerLineParsingException, 'not a TRACE debug message'
+        if 'GST_TRACER' != tokens[7]:
+            raise GstTracerLineParsingException, 'not a GST_TRACER line'
 
         self.time = tokens[0]
 
         #FIXME some structures fail parsing
-        self.structure = Gst.Structure.from_string(' '.join(tokens[8:]))[0]
+        self.structure = Gst.Structure.from_string(' '.join(tokens[9:]))[0]
 
     def get_thread(self):
         return self.structure.get_value('thread-id')
@@ -145,7 +145,7 @@ def process_file(input_file):
         for line in f:
             try:
                 tracer_line = GstTracerLine(line)
-            except GstTracerLineParsingException:
+            except GstTracerLineParsingException, e:
                 continue
 
             if tracer_line.is_new_element():

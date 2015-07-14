@@ -93,8 +93,7 @@ class GstCapsQueryTree(object):
     def add_node(self, node):
         if node.queryline.is_post_query():
 #            assert self.current.queryline == node.queryline
-            self.current.queryline = node.queryline
-            self.current.close()
+            self.current.close(node.queryline)
             self.current = self.current.parent
         else:
             self.current.add_child(node)
@@ -111,12 +110,15 @@ class GstCapsQueryTree(object):
 class GstCapsQueryTreeNode(object):
     def __init__(self, queryline):
         self.children = []
-        self.state = 'open'
         self.queryline = queryline
+        self.res_queryline = None
         self.parent = None
 
-    def close(self):
-        self.state = 'closed'
+    def close(self, queryline):
+        self.res_queryline = queryline
+
+    def get_total_time(self):
+        return self.res_queryline.ts - self.queryline.ts
 
     def add_child(self, node):
         self.children.append(node)

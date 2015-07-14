@@ -50,6 +50,10 @@ class GstTracerLine(object):
     def is_new_pad(self):
         return self.structure and self.structure.get_name() == 'new-pad'
 
+    @property
+    def ts(self):
+        return int(self.structure.get_value('ts'))
+
     # QUERY RELATED FUNCTIONS
     def is_query_type(self, name):
         return self.structure.get_value('name') == name

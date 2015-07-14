@@ -107,6 +107,11 @@ class GstCapsQueryTree(object):
         self.root.get_pretty_string(lines, 0)
         return '\n'.join(lines)
 
+    def traverse(self):
+        if self.root:
+            return self.root.traverse()
+        return []
+
 class GstCapsQueryTreeNode(object):
     def __init__(self, queryline):
         self.children = []
@@ -124,19 +129,109 @@ class GstCapsQueryTreeNode(object):
         self.children.append(node)
         node.parent = self
 
+    def is_caps_query(self):
+        return self.queryline.is_query_type('caps')
+
+    def is_accept_caps_query(self):
+        return self.queryline.is_query_type('accept-caps')
+
+    @property
+    def query_name(self):
+        if self.is_caps_query(): return 'query-caps'
+        elif self.is_accept_caps_query(): return 'accept-caps'
+        else: return '-'
+
+    def traverse(self):
+        yield self
+        for c in self.children:
+            for c_node in c.traverse():
+                yield c_node
+
     def get_pretty_string(self, lines, indent=0):
         structure = self.queryline.get_query_structure()
-        x = '%s%s : %s(%s):%s(%s) - filter: %s : res: %s' % (
+        if self.res_queryline:
+            res_structure = self.res_queryline.get_query_structure()
+        else:
+            res_structure = None
+        x = '%s%s : %s : %s(%s):%s(%s) ' % (
             ' ' * indent, str(self.queryline.time),
+            self.query_name,
             get_element_name(self.queryline.get_query_origin()),
             str(self.queryline.get_query_origin()),
             get_pad_name(self.queryline.get_query_origin_pad()),
-            str(self.queryline.get_query_origin_pad()),
-            structure.get_value('filter').to_string(),
-            structure.get_value('caps').to_string())
+            str(self.queryline.get_query_origin_pad()))
+        if self.is_caps_query():
+            x += '- filter: %s : res: %s' % (
+                structure.get_value('filter').to_string(),
+                res_structure.get_value('caps').to_string() if res_structure else \
+                structure.get_value('caps').to_string())
+        else:
+            x += '- caps: %s : res: %s' % (
+                structure.get_value('caps').to_string(),
+                res_structure.get_value('result') if res_structure else '')
         lines.append(x)
         for c in self.children:
             c.get_pretty_string(lines, indent+4)
+        if self.res_queryline:
+            end = '%s%s' % (' ' * indent, str(self.res_queryline.time))
+        else:
+            end = '%s-' % (' ' * indent)
+        lines.append(end)
+
+class GstCapsQueryPadStats(object):
+    class QueryMapKey(object):
+        def __init__(self, filtercaps, caps, result):
+            self.filtercaps = filtercaps
+            self.caps = caps
+            self.result = result
+
+        def __hash__(self):
+            return hash(0) #TODO always collide
+
+        def __eq__(self, o):
+            return self.filtercaps.is_equal(o.filtercaps) and \
+                   self.caps.is_equal(o.caps) and \
+                   self.result == o.result
+
+    def __init__(self, elem, pad):
+        self.elem = elem
+        self.pad = pad
+        self.queries_map = {} #the key is the filter/result
+                              #to know how many time the same caps
+                              #query was repeated on this pad
+
+    def add_node(self, node):
+        # TODO verify this node belongs to the stats
+
+        # TODO what to do with open queries?
+        if not node.res_queryline:
+            return
+
+        if not node.is_caps_query():
+            return
+
+        structure = node.res_queryline.structure.get_value('structure')
+        key = GstCapsQueryPadStats.QueryMapKey(structure.get_value('filter'), \
+               structure.get_value('caps'), structure.get_value('result'))
+        data = self.queries_map.get(key, [])
+        data.append(node)
+        self.queries_map[key] = data
+
+    def get_pretty_string(self, indent):
+        lines = []
+        for k,v in self.queries_map.iteritems():
+            lines.append(indent * ' ' + 'filter: ' + k.filtercaps.to_string())
+            lines.append(indent * ' ' + 'caps: ' + k.caps.to_string())
+            lines.append(indent * ' ' + 'res: ' + str(k.result))
+            lines.append(indent * ' ' + 'Repetead: %d (total time: %d)' % \
+                         (len(v), sum([x.get_total_time() for x in v])))
+            lines.append('')
+        return '\n'.join(lines)
+
+def gen_element_pad_name(elem,pad):
+    return '%s(%s):%s(%s)' % (
+            get_element_name(elem), str(elem),
+            get_pad_name(pad), str(pad))
 
 def process_file(input_file):
 
@@ -161,7 +256,8 @@ def process_file(input_file):
                 pads[tracer_line.structure.get_value('ix')] = \
                     tracer_line.structure.get_value('name')
             elif tracer_line.is_query():
-                if not tracer_line.is_query_type('caps'): continue
+                if not (tracer_line.is_query_type('caps') or \
+                        tracer_line.is_query_type('accept-caps')): continue
 
                 thread = tracer_line.get_thread()
                 if thread in threads:

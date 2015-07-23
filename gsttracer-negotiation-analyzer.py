@@ -212,7 +212,7 @@ class GstCapsQueryPadStats(object):
 
         structure = node.res_queryline.structure.get_value('structure')
         key = GstCapsQueryPadStats.QueryMapKey(structure.get_value('filter'), \
-               structure.get_value('caps'), structure.get_value('result'))
+               structure.get_value('caps'), node.res_queryline.structure.get_value('res'))
         data = self.queries_map.get(key, [])
         data.append(node)
         self.queries_map[key] = data

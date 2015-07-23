@@ -223,7 +223,7 @@ class GstCapsQueryPadStats(object):
             lines.append(indent * ' ' + 'filter: ' + k.filtercaps.to_string())
             lines.append(indent * ' ' + 'caps: ' + k.caps.to_string())
             lines.append(indent * ' ' + 'res: ' + str(k.result))
-            lines.append(indent * ' ' + 'Repetead: %d (total time: %d)' % \
+            lines.append(indent * ' ' + 'Repeated: %d (total time: %dns)' % \
                          (len(v), sum([x.get_total_time() for x in v])))
             lines.append('')
         return '\n'.join(lines)

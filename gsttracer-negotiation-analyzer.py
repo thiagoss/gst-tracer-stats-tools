@@ -102,6 +102,13 @@ class GstCapsQueryTree(object):
     def is_closed(self):
         return self.current == None
 
+    @property
+    def node_count(self):
+        return self.root.node_count
+
+    def get_total_time(self):
+        return self.root.get_total_time()
+
     def get_pretty_string(self):
         lines = []
         self.root.get_pretty_string(lines, 0)
@@ -124,6 +131,10 @@ class GstCapsQueryTreeNode(object):
 
     def get_total_time(self):
         return self.res_queryline.ts - self.queryline.ts
+
+    @property
+    def node_count(self):
+        return 1 + sum([x.node_count for x in self.children])
 
     def add_child(self, node):
         self.children.append(node)
@@ -306,3 +317,8 @@ if __name__ == '__main__':
         print gen_element_pad_name(k[0], k[1])
         print statistics[k].get_pretty_string(4)
         print
+
+    print '=== TOTALS ==='
+    print 'Total query trees:', len(queries)
+    print 'Total queries:', sum([q.node_count for q in queries])
+    print 'Total time: %dns' % sum([q.get_total_time() for q in queries])

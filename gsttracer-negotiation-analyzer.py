@@ -22,6 +22,12 @@ def get_pad_name(n):
         return pad_names[n]
     else: return '--%s--' % str(n)
 
+def element_is_pipeline(line, elements):
+    elem = line.get_element_ix()
+    if elem in elements and elements[elem]:
+        return 'pipeline' in elements[elem] or 'playbin' in elements[elem]
+    return False
+
 class GstTracerLine(object):
     def __init__(self, line):
         self.line = line
@@ -46,6 +52,9 @@ class GstTracerLine(object):
     def get_thread(self):
         return self.structure.get_value('thread-id')
 
+    def get_element_ix(self):
+        return self.structure.get_value('elem-ix')
+
     def is_query(self):
         return self.structure and self.structure.get_name() == 'query'
 
@@ -54,6 +63,9 @@ class GstTracerLine(object):
 
     def is_new_pad(self):
         return self.structure and self.structure.get_name() == 'new-pad'
+
+    def is_message(self):
+        return self.structure and self.structure.get_name() == 'message'
 
     @property
     def ts(self):
@@ -86,6 +98,13 @@ class GstTracerLine(object):
         return self.structure.has_field('res')
 
     # END OF QUERY RELATED FUNCTIONS
+
+    # MESSAGE RELATED FUNCTIONS
+
+    def is_message_type(self, name):
+        return self.structure.get_value('name') == name
+
+    # END OF MESSAGE_RELATED_FUNCTIONS
 
     def __str__(self):
         return self.line
@@ -257,6 +276,7 @@ def process_file(input_file):
     query_trees = []
     elements = {}
     pads = {}
+    preroll_time = 0
 
     with open(input_file, 'r') as f:
         for line in f:
@@ -286,7 +306,12 @@ def process_file(input_file):
                     tree = GstCapsQueryTree(GstCapsQueryTreeNode(tracer_line))
                     threads[thread] = tree
 
-    return {'elements' : elements, 'pads' : pads, 'queries' : query_trees}
+            elif tracer_line.is_message():
+                if tracer_line.is_message_type('async-done') and element_is_pipeline(tracer_line, elements):
+                    preroll_time = tracer_line.ts
+
+    return {'elements' : elements, 'pads' : pads, 'queries' : query_trees,
+            'preroll-time' : preroll_time}
 
 def generate_per_pad_caps_query_summary(queries):
     summary = {}
@@ -327,3 +352,4 @@ if __name__ == '__main__':
     print 'Total query trees:', len(queries)
     print 'Total queries:', sum([q.node_count for q in queries])
     print 'Total time: %dns' % sum([q.get_total_time() for q in queries])
+    print 'Preroll time: %dns' % data['preroll-time']

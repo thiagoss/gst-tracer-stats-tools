@@ -12,6 +12,56 @@ element_names = {}
 global pad_names
 pad_names = {}
 
+# From http://stackoverflow.com/questions/3696430/print-colorful-string-out-to-console-with-python
+CODE={
+    'ENDC':0,  # RESET COLOR
+    'BOLD':1,
+    'UNDERLINE':4,
+    'BLINK':5,
+    'INVERT':7,
+    'CONCEALD':8,
+    'STRIKE':9,
+    'GREY30':90,
+    'GREY40':2,
+    'GREY65':37,
+    'GREY70':97,
+    'GREY20_BG':40,
+    'GREY33_BG':100,
+    'GREY80_BG':47,
+    'GREY93_BG':107,
+    'DARK_RED':31,
+    'RED':91,
+    'RED_BG':41,
+    'LIGHT_RED_BG':101,
+    'DARK_YELLOW':33,
+    'YELLOW':93,
+    'YELLOW_BG':43,
+    'LIGHT_YELLOW_BG':103,
+    'DARK_BLUE':34,
+    'BLUE':94,
+    'BLUE_BG':44,
+    'LIGHT_BLUE_BG':104,
+    'DARK_MAGENTA':35,
+    'PURPLE':95,
+    'MAGENTA_BG':45,
+    'LIGHT_PURPLE_BG':105,
+    'DARK_CYAN':36,
+    'AUQA':96,
+    'CYAN_BG':46,
+    'LIGHT_AUQA_BG':106,
+    'DARK_GREEN':32,
+    'GREEN':92,
+    'GREEN_BG':42,
+    'LIGHT_GREEN_BG':102,
+    'BLACK':30,
+}
+
+def termcode(num):
+    return '\033[%sm'%num
+
+def colorstr(astr,color):
+    return termcode(CODE[color])+astr+termcode(CODE['ENDC'])
+
 def get_element_name(n):
     if n in element_names:
         return element_names[n]
@@ -27,6 +77,11 @@ def element_is_pipeline(line, elements):
     if elem in elements and elements[elem]:
         return 'pipeline' in elements[elem] or 'playbin' in elements[elem]
     return False
+
+# Issues list
+
+# An accept-caps has ended up doing a downstream caps query
+PERFORMANCE_ACCEPT_CAPS = 'performance/accept-caps'
 
 class GstTracerLine(object):
     def __init__(self, line):
@@ -149,6 +204,7 @@ class GstCapsQueryTreeNode(object):
         self.queryline = queryline
         self.res_queryline = None
         self.parent = None
+        self.issues = []
 
     def close(self, queryline):
         self.res_queryline = queryline
@@ -160,9 +216,26 @@ class GstCapsQueryTreeNode(object):
     def node_count(self):
         return 1 + sum([x.node_count for x in self.children])
 
+    def _check_child(self, child):
+        # assumes self is parent of child
+
+        # Accept-caps shouldn't lead to downstream/upstream
+        # caps queries. It should only check the current element
+        if child.queryline.is_query_type('caps'):
+            parent_accept = None
+            if self.queryline.is_query_type('accept-caps'):
+                parent_accept = self
+            elif self.parent and self.parent.queryline.is_query_type('accept-caps'):
+                parent_accept = self.parent
+            if parent_accept and child.queryline.get_element_ix() != parent_accept.queryline.get_element_ix():
+                child.issues.append(PERFORMANCE_ACCEPT_CAPS)
+
     def add_child(self, node):
         self.children.append(node)
         node.parent = self
+
+        self._check_child(node)
+
 
     def is_caps_query(self):
         return self.queryline.is_query_type('caps')
@@ -204,6 +277,11 @@ class GstCapsQueryTreeNode(object):
             x += '- caps: %s : res: %s' % (
                 structure.get_value('caps').to_string(),
                 res_structure.get_value('result') if res_structure else '')
+
+        if self.issues:
+            x += ' : Issues:%s' % str(self.issues)
+            x = colorstr(x,'RED')
+
         lines.append(x)
         for c in self.children:
             c.get_pretty_string(lines, indent+4)

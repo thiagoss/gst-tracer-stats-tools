@@ -42,6 +42,23 @@ G_BEGIN_DECLS
 typedef struct _GstCapsNegoAnalyzerTracer GstCapsNegoAnalyzerTracer;
 typedef struct _GstCapsNegoAnalyzerTracerClass GstCapsNegoAnalyzerTracerClass;
 
+typedef struct _GstQueryTree
+{
+  GThread *thread;
+
+  GNode *root;
+  GNode *current;
+} GstQueryTree;
+
+typedef struct _GstQueryTreeNode
+{
+  GstQuery *query;
+  GstQuery *result_query;
+  gboolean result;
+} GstQueryTreeNode;
+
+#define GST_QUERY_TREE_NODE_IS_COMPLETE(n) ((n)->result_query != NULL)
+
 /**
  * GstCapsNegoAnalyzerTracer:
  *
@@ -51,6 +68,7 @@ struct _GstCapsNegoAnalyzerTracer {
   GstTracer	 parent;
 
   /*< private >*/
+  GQueue incomplete_trees;
 };
 
 struct _GstCapsNegoAnalyzerTracerClass {

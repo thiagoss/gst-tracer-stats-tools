@@ -52,9 +52,20 @@ typedef struct _GstQueryTree
 
 typedef struct _GstQueryTreeNode
 {
-  GstQuery *query;
-  GstQuery *result_query;
+  GstQueryType query_type;
+
+  GstCaps *caps; /* filter caps or accept caps */
+
+  /* caps query result */
+  GstCaps *caps_result;
+
+  /* accept_caps result */
+  gboolean accepted_caps;
+
+  /* query result */
   gboolean result;
+
+  gboolean complete;
 } GstQueryTreeNode;
 
 #define GST_QUERY_TREE_NODE_IS_COMPLETE(n) ((n)->result_query != NULL)

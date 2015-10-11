@@ -91,7 +91,7 @@ gst_query_tree_node_traverse_print (GNode * node, gpointer udata)
     g_string_append (string, INDENT_STRING);
   }
 
-  g_string_append (string, GST_QUERY_TYPE_NAME (n->result_query));
+  g_string_append (string, gst_query_type_get_name (n->query_type));
   g_print ("%s\n", string->str);
   g_string_free (string, TRUE);
   return FALSE;
@@ -108,29 +108,65 @@ gst_query_tree_print (GstQueryTree * tree)
 static GstQueryTreeNode *
 create_tree_node (GstQuery * q)
 {
-  GstQueryTreeNode *tree_node = g_slice_alloc (sizeof (GstQuery));
-  tree_node->query = q;
-  tree_node->result_query = NULL;
+  GstQueryTreeNode *tree_node = g_slice_alloc0 (sizeof (GstQuery));
+  tree_node->query_type = GST_QUERY_TYPE (q);
+  switch (GST_QUERY_TYPE (q)) {
+    case GST_QUERY_CAPS:
+      gst_query_parse_caps (q, &tree_node->caps);
+      if (tree_node->caps)
+        gst_caps_ref (tree_node->caps);
+      break;
+    case GST_QUERY_ACCEPT_CAPS:
+      gst_query_parse_accept_caps (q, &tree_node->caps);
+      gst_caps_ref (tree_node->caps);
+      break;
+    default:
+      g_assert_not_reached ();
+      break;
+  }
 
   return tree_node;
 }
 
 static void
-gst_query_tree_node_set_complete (GstQueryTreeNode * node, GstQuery * q,
+gst_query_tree_node_set_complete (GstQueryTreeNode * tree_node, GstQuery * q,
     gboolean result)
 {
   /* TODO verify proper closing and if the fields are the same */
 
-  g_return_if_fail (GST_QUERY_TYPE (node->query) == GST_QUERY_TYPE (q));
+  g_return_if_fail (tree_node->query_type == GST_QUERY_TYPE (q));
+  g_return_if_fail (!tree_node->complete);
 
-  node->result_query = q;
-  node->result = result;
+  switch (GST_QUERY_TYPE (q)) {
+    case GST_QUERY_CAPS:
+      g_assert (tree_node->caps_result == NULL);
+      gst_query_parse_caps_result (q, &tree_node->caps_result);
+      if (tree_node->caps_result)
+        gst_caps_ref (tree_node->caps_result);
+      break;
+    case GST_QUERY_ACCEPT_CAPS:
+      gst_query_parse_accept_caps_result (q, &tree_node->accepted_caps);
+      gst_caps_ref (tree_node->caps);
+      break;
+    default:
+      g_assert_not_reached ();
+      break;
+  }
+  tree_node->result = result;
+  tree_node->complete = TRUE;
 }
 
 static gboolean
 gst_query_tree_node_free (GNode * n, gpointer udata)
 {
-  g_slice_free (GstQueryTreeNode, n->data);
+  GstQueryTreeNode *tree_node = n->data;
+
+  if (tree_node->caps)
+    gst_caps_unref (tree_node->caps);
+  if (tree_node->caps_result)
+    gst_caps_unref (tree_node->caps_result);
+
+  g_slice_free (GstQueryTreeNode, tree_node);
   return FALSE;
 }
 

@@ -53,6 +53,8 @@ typedef struct _GstQueryTree
 typedef struct _GstQueryTreeNode
 {
   GstQueryType query_type;
+  GstPad *pad;
+  GstPad *peer;
 
   GstCaps *caps; /* filter caps or accept caps */
 
@@ -65,10 +67,11 @@ typedef struct _GstQueryTreeNode
   /* query result */
   gboolean result;
 
-  gboolean complete;
+  guint64 start;
+  guint64 end;
 } GstQueryTreeNode;
 
-#define GST_QUERY_TREE_NODE_IS_COMPLETE(n) ((n)->result_query != NULL)
+#define GST_QUERY_TREE_NODE_IS_COMPLETE(n) ((n)->end != -1)
 
 /**
  * GstCapsNegoAnalyzerTracer:

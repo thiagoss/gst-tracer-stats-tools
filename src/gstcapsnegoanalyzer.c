@@ -91,6 +91,7 @@ gst_query_tree_node_traverse_print (GNode * node, gpointer udata)
     g_string_append (string, INDENT_STRING);
   }
 
+  g_string_append_printf (string, "%s:%s" " -> %s:%s" ": ", GST_DEBUG_PAD_NAME (n->pad), GST_DEBUG_PAD_NAME (n->peer));
   g_string_append (string, gst_query_type_get_name (n->query_type));
   g_print ("%s\n", string->str);
   g_string_free (string, TRUE);
@@ -106,10 +107,17 @@ gst_query_tree_print (GstQueryTree * tree)
 }
 
 static GstQueryTreeNode *
-create_tree_node (GstQuery * q)
+create_tree_node (GstPad * pad, GstQuery * q, guint64 ts)
 {
   GstQueryTreeNode *tree_node = g_slice_alloc0 (sizeof (GstQuery));
+
+  tree_node->start = ts;
+  tree_node->end = -1;
+  tree_node->pad = gst_object_ref (pad);
+  if (GST_PAD_PEER (pad))
+    tree_node->peer = gst_object_ref (GST_PAD_PEER (pad));
   tree_node->query_type = GST_QUERY_TYPE (q);
+
   switch (GST_QUERY_TYPE (q)) {
     case GST_QUERY_CAPS:
       gst_query_parse_caps (q, &tree_node->caps);
@@ -130,12 +138,12 @@ create_tree_node (GstQuery * q)
 
 static void
 gst_query_tree_node_set_complete (GstQueryTreeNode * tree_node, GstQuery * q,
-    gboolean result)
+    gboolean result, guint64 ts)
 {
   /* TODO verify proper closing and if the fields are the same */
 
   g_return_if_fail (tree_node->query_type == GST_QUERY_TYPE (q));
-  g_return_if_fail (!tree_node->complete);
+  g_return_if_fail (!GST_QUERY_TREE_NODE_IS_COMPLETE (tree_node));
 
   switch (GST_QUERY_TYPE (q)) {
     case GST_QUERY_CAPS:
@@ -153,7 +161,7 @@ gst_query_tree_node_set_complete (GstQueryTreeNode * tree_node, GstQuery * q,
       break;
   }
   tree_node->result = result;
-  tree_node->complete = TRUE;
+  tree_node->end = ts;
 }
 
 static gboolean
@@ -194,9 +202,9 @@ gst_caps_nego_analyzer_tracer_complete_tree (GstCapsNegoAnalyzerTracer * self,
 
 static void
 gst_query_tree_append_query (GstCapsNegoAnalyzerTracer * tracer,
-    GstQueryTree * tree, GstQuery * q)
+    GstQueryTree * tree, GstPad * pad, GstQuery * q, guint64 ts)
 {
-  GstQueryTreeNode *tree_node = create_tree_node (q);
+  GstQueryTreeNode *tree_node = create_tree_node (pad, q, ts);
 
   if (tree->root) {
     g_node_append_data (tree->current, tree_node);
@@ -209,9 +217,9 @@ gst_query_tree_append_query (GstCapsNegoAnalyzerTracer * tracer,
 
 static gboolean
 gst_query_tree_append_query_result (GstCapsNegoAnalyzerTracer * tracer,
-    GstQueryTree * tree, GstQuery * q, gboolean res)
+    GstQueryTree * tree, GstQuery * q, gboolean res, guint64 ts)
 {
-  gst_query_tree_node_set_complete (tree->current->data, q, res);
+  gst_query_tree_node_set_complete (tree->current->data, q, res, ts);
   tree->current = tree->current->parent;
 
   if (tree->current == NULL)
@@ -221,7 +229,7 @@ gst_query_tree_append_query_result (GstCapsNegoAnalyzerTracer * tracer,
 }
 
 static void
-do_query_pre (GstCapsNegoAnalyzerTracer * self, guint64 ts, GstPad * this_pad,
+do_query_pre (GstCapsNegoAnalyzerTracer * self, guint64 ts, GstPad * pad,
     GstQuery * qry)
 {
   GThread *thread;
@@ -235,11 +243,11 @@ do_query_pre (GstCapsNegoAnalyzerTracer * self, guint64 ts, GstPad * this_pad,
       return;
   }
 
-  GST_DEBUG_OBJECT (self, "%" GST_PTR_FORMAT " - pre query", this_pad);
+  GST_DEBUG_OBJECT (self, "%" GST_PTR_FORMAT " - pre query", pad);
 
   thread = g_thread_self ();
   tree = get_incomplete_tree (self, thread);
-  gst_query_tree_append_query (self, tree, qry);
+  gst_query_tree_append_query (self, tree, pad, qry, ts);
 }
 
 static void
@@ -261,7 +269,7 @@ do_query_post (GstCapsNegoAnalyzerTracer * self, guint64 ts, GstPad * this_pad,
 
   thread = g_thread_self ();
   tree = get_incomplete_tree (self, thread);
-  if (gst_query_tree_append_query_result (self, tree, qry, res))
+  if (gst_query_tree_append_query_result (self, tree, qry, res, ts))
     gst_caps_nego_analyzer_tracer_complete_tree (self, tree);
 }
 

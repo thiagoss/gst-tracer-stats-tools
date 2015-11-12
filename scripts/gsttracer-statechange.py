@@ -1,6 +1,8 @@
 import sys
 
 class ElementStateChange(object):
+    VALUES = {'null' : 1, 'ready' : 2, 'ready-async': 3, 'paused' : 4, 'playing' : 5}
+
     def __init__(self, initial_state, final_state, transition_start_ts, transition_end_ts):
         self.initial_state = initial_state
         self.final_state = final_state
@@ -8,7 +10,17 @@ class ElementStateChange(object):
         self.transition_end_ts = transition_end_ts
 
     def __str__(self):
-        return '%s -> %s : %d' % (self.initial_state, self.final_state, (self.transition_end_ts - self.transition_start_ts))
+        return '%s -> %s : %d' % (self.initial_state, self.final_state, self.duration)
+
+    def get_transition_name(self):
+        return self.initial_state + ' -> ' + self.final_state
+
+    def is_upwards(self):
+        return ElementStateChange.VALUES[self.final_state] > ElementStateChange.VALUES[self.initial_state]
+
+    @property
+    def duration(self):
+        return self.transition_end_ts - self.transition_start_ts
 
 
 class ElementStateChangeTiming(object):
@@ -18,24 +30,36 @@ class ElementStateChangeTiming(object):
         self.ts = ts
         self.state = 'null'
         self.pending_state = None
+        self.async_pending = False
         self.transition_start = None
         self.transitions = []
 
     def start_state_change(self, ts, initial_state, final_state):
-        assert self.state == initial_state, '%s: %s != %s' % (self.element, self.state, initial_state)
-        assert self.pending_state == None
+        assert self.state == initial_state or (self.async_pending and self.pending_state == initial_state), '%s: %s/%s != %s' % (self.element, self.state, self.pending_state, initial_state)
+        assert self.pending_state == None or (self.async_pending and self.pending_state == initial_state)
+        if self.async_pending:
+            self.async_done(ts)
         self.pending_state = final_state
         self.transition_start = ts
 
     def finish_state_change(self, ts, initial_state, final_state, result):
         if result != 'failure':
             assert final_state == self.pending_state
-            self.state = final_state
-            self.transitions.append(ElementStateChange (initial_state, final_state, self.transition_start, ts))
-            self.pending_state = None
-            self.transition_start = None
+            if result == 'async':
+                self.state = initial_state + '-async'
+                self.transitions.append(ElementStateChange (initial_state, self.state, self.transition_start, ts))
+                self.transition_start = ts
+                self.async_pending = True
+            else:
+                self.state = final_state
+                self.transitions.append(ElementStateChange (initial_state, final_state, self.transition_start, ts))
+                self.pending_state = None
+                self.transition_start = None
 
-
+    def async_done(self, ts):
+        if self.async_pending:
+            self.async_pending = False
+            self.finish_state_change(ts, self.state, self.pending_state, 'success')
 
 def parse_entry(entry):
     tokens = entry.split('$')
@@ -70,6 +94,8 @@ def process_file(input_file):
                 elements[ptr].start_state_change(ts, data[0], data[1])
             elif event == 'element-state-change-post':
                 elements[ptr].finish_state_change(ts, data[0], data[1], data[2])
+            elif event == 'element-async-done':
+                elements[ptr].async_done(ts)
 
     return sorted(old_elements + elements.values(), key=lambda x: x.ts)
 
@@ -113,7 +139,9 @@ def output_html_timeline_chart(elements):
     """
     data = []
     for e in elements:
-        data.append("['%s', '%s', '%s', %d, %d]" % (e.element, 'null', e.ptr, e.ts, maxtime))
+        for t in e.transitions:
+            if t.is_upwards():
+                data.append("['%s', '%s', '%s', %d, %d]" % (e.element, t.get_transition_name(), t.get_transition_name() + '(' + str(t.duration) + ')', t.transition_start_ts, t.transition_end_ts))
 
     return html % {'data': ',\n'.join(data)}
 

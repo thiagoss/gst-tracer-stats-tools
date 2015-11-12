@@ -108,6 +108,16 @@ do_change_state_post (GstTracer * tracer, GstClockTime ts, GstElement * element,
 }
 
 static void
+do_post_message_pre (GstTracer * tracer, GstClockTime ts, GstElement * element,
+    GstMessage * msg)
+{
+  if (GST_MESSAGE_TYPE (msg) == GST_MESSAGE_ASYNC_DONE) {
+    GST_INFO ("%" G_GUINT64_FORMAT "$element-async-done$%p$%" GST_PTR_FORMAT,
+        (guint64) ts, element, element);
+  }
+}
+
+static void
 gst_state_change_tracer_class_init (GstStateChangeTracerClass * klass)
 {
 }
@@ -123,6 +133,8 @@ gst_state_change_tracer_init (GstStateChangeTracer * self)
       G_CALLBACK (do_change_state_pre));
   gst_tracing_register_hook (tracer, "element-change-state-post",
       G_CALLBACK (do_change_state_post));
+  gst_tracing_register_hook (tracer, "element-post-message-pre",
+      G_CALLBACK (do_post_message_pre));
 }
 
 static gboolean

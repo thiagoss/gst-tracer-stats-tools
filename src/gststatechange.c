@@ -118,6 +118,15 @@ do_post_message_pre (GstTracer * tracer, GstClockTime ts, GstElement * element,
 }
 
 static void
+do_bin_add_post (GstTracer * tracer, GstClockTime ts, GstBin * bin, GstElement * element, gboolean res)
+{
+  if (res) {
+    GST_INFO ("%" G_GUINT64_FORMAT "$bin-add-post$%p$%" GST_PTR_FORMAT
+        "$%p$%" GST_PTR_FORMAT, (guint64) ts, bin, bin, element, element);
+  }
+}
+
+static void
 gst_state_change_tracer_class_init (GstStateChangeTracerClass * klass)
 {
 }
@@ -135,6 +144,8 @@ gst_state_change_tracer_init (GstStateChangeTracer * self)
       G_CALLBACK (do_change_state_post));
   gst_tracing_register_hook (tracer, "element-post-message-pre",
       G_CALLBACK (do_post_message_pre));
+  gst_tracing_register_hook (tracer, "bin-add-post",
+      G_CALLBACK (do_bin_add_post));
 }
 
 static gboolean

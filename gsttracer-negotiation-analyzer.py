@@ -108,7 +108,7 @@ class GstTracerLine(object):
         return self.structure.get_value('thread-id')
 
     def get_element_ix(self):
-        return self.structure.get_value('elem-ix')
+        return self.structure.get_value('element-ix')
 
     def is_query(self):
         return self.structure and self.structure.get_name() == 'query'
@@ -131,17 +131,17 @@ class GstTracerLine(object):
         return self.structure.get_value('name') == name
 
     def query_between_elements(self):
-        return self.structure.get_value('elem-ix') != 4294967295 and \
-               self.structure.get_value('peer-elem-ix') != 4294967295
+        return self.structure.get_value('element-ix') != 4294967295 and \
+               self.structure.get_value('peer-element-ix') != 4294967295
 
     def get_query_origin(self):
-        return self.structure.get_value('elem-ix')
+        return self.structure.get_value('element-ix')
 
     def get_query_origin_pad(self):
         return self.structure.get_value('pad-ix')
 
     def get_query_peer(self):
-        return self.structure.get_value('peer-elem-ix')
+        return self.structure.get_value('peer-element-ix')
 
     def get_query_peer_pad(self):
         return self.structure.get_value('peer-pad-ix')

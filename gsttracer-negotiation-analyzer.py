@@ -333,7 +333,7 @@ class GstCapsQueryPadStats(object):
     def get_pretty_string(self, indent):
         lines = []
         for k,v in self.queries_map.iteritems():
-            lines.append(indent * ' ' + 'filter: ' + k.filtercaps.to_string())
+            lines.append(indent * ' ' + 'filter: ' + (k.filtercaps.to_string() if k.filtercaps else '--'))
             lines.append(indent * ' ' + 'caps: ' + k.caps.to_string())
             lines.append(indent * ' ' + 'res: ' + str(k.result))
             lines.append(indent * ' ' + 'Repeated: %d (total time: %dns)' % \

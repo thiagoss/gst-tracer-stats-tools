@@ -150,7 +150,7 @@ class GstTracerLine(object):
         return self.structure.get_value('structure')
 
     def is_post_query(self):
-        return self.structure.has_field('res')
+        return self.structure.get_value('have-res')
 
     # END OF QUERY RELATED FUNCTIONS
 
